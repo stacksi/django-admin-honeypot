@@ -1,13 +1,34 @@
-import django
-from admin_honeypot.forms import HoneypotLoginForm
-from admin_honeypot.models import LoginAttempt
-from admin_honeypot.signals import honeypot
 from django.contrib.auth import REDIRECT_FIELD_NAME
 from django.contrib.auth.views import redirect_to_login
 from django.shortcuts import redirect
 from django.urls import reverse
 from django.utils.translation import gettext as _
 from django.views import generic
+
+import ipware.ip
+from axes.conf import settings
+
+from admin_honeypot.forms import HoneypotLoginForm
+from admin_honeypot.models import LoginAttempt
+from admin_honeypot.signals import honeypot
+
+
+def get_client_ip_address(request):
+    """
+    Get client IP address as configured by the user.
+    The django-ipware package is used for address resolution
+    and parameters can be configured in the Axes package.
+    """
+
+    client_ip_address, _ = ipware.ip.get_client_ip(
+        request,
+        proxy_order=settings.AXES_PROXY_ORDER,
+        proxy_count=settings.AXES_PROXY_COUNT,
+        proxy_trusted_ips=settings.AXES_PROXY_TRUSTED_IPS,
+        request_header_order=settings.AXES_META_PRECEDENCE_ORDER,
+    )
+
+    return client_ip_address
 
 
 class AdminHoneypot(generic.FormView):
@@ -46,7 +67,7 @@ class AdminHoneypot(generic.FormView):
         instance = LoginAttempt.objects.create(
             username=self.request.POST.get('username'),
             session_key=self.request.session.session_key,
-            ip_address=self.request.META.get('REMOTE_ADDR'),
+            ip_address=get_client_ip_address(self.request),
             user_agent=self.request.META.get('HTTP_USER_AGENT'),
             path=self.request.get_full_path(),
         )
